@@ -1,0 +1,103 @@
+name: cap-local-complete
+
+# COMPLETE LOCAL CAP INSTALLATION FOR SHARING
+# This setup includes everything needed to run Cap locally
+# Backend services run in Docker, desktop app runs natively
+
+services:
+  # MySQL Database
+  cap-mysql:
+    container_name: cap-mysql
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: planetscale
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    command:
+      [
+        "--max_connections=1000",
+        "--default-authentication-plugin=mysql_native_password",
+      ]
+    ports:
+      - "3307:3306"
+    volumes:
+      - cap-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # MinIO S3 Storage
+  cap-minio:
+    container_name: cap-minio
+    image: "bitnami/minio:latest"
+    restart: unless-stopped
+    ports:
+      - "3906:3902"  # API port
+      - "3907:3903"  # Console port
+    environment:
+      - MINIO_API_PORT_NUMBER=3902
+      - MINIO_CONSOLE_PORT_NUMBER=3903
+      - MINIO_ROOT_USER=capS3root
+      - MINIO_ROOT_PASSWORD=capS3root
+    volumes:
+      - cap-minio-data:/bitnami/minio/data
+      - cap-minio-certs:/certs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3902/minio/health/live || exit 1"]
+      timeout: 10s
+      retries: 5
+
+  # Initialize MinIO bucket
+  cap-minio-init:
+    container_name: cap-minio-init
+    image: "bitnami/minio-client:latest"
+    depends_on:
+      cap-minio:
+        condition: service_healthy
+    volumes:
+      - ./scripts:/scripts
+    entrypoint: >
+      sh -c "
+        mc alias set local http://cap-minio:3902 capS3root capS3root &&
+        mc mb local/capso --ignore-existing &&
+        mc policy set public local/capso &&
+        echo 'MinIO bucket initialized successfully'
+      "
+    restart: "no"
+
+  # Web interface (optional - for browser access if needed)
+  cap-web:
+    container_name: cap-web
+    image: ghcr.io/capsoftware/cap-web:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: 'mysql://root:@cap-mysql:3306/planetscale?ssl={"rejectUnauthorized":false}'
+      WEB_URL: http://localhost:3005
+      NEXTAUTH_URL: http://localhost:3005
+      DATABASE_ENCRYPTION_KEY: c7a1e98e1e5e4cec5a3fbf5eaf502d262fb99807ae2be8ee70537409e29cb6f9
+      NEXTAUTH_SECRET: c7a1e98e1e5e4cec5a3fbf5eaf502d262fb99807ae2be8ee70537409e29cb6f9
+      CAP_AWS_ACCESS_KEY: capS3root
+      CAP_AWS_SECRET_KEY: capS3root
+      CAP_AWS_BUCKET: capso
+      CAP_AWS_REGION: us-east-1
+      S3_PUBLIC_ENDPOINT: http://localhost:3906
+      S3_INTERNAL_ENDPOINT: http://cap-minio:3902
+      RESEND_API_KEY: ""
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
+    ports:
+      - 3005:3000
+    depends_on:
+      cap-mysql:
+        condition: service_healthy
+      cap-minio:
+        condition: service_healthy
+    profiles:
+      - web  # Only start if explicitly requested
+
+volumes:
+  cap-mysql-data:
+  cap-minio-data:
+  cap-minio-certs:

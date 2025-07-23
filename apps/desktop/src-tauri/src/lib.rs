@@ -1955,6 +1955,18 @@ pub async fn run(recording_logging_handle: LoggingHandle) {
 
             tokio::spawn(check_notification_permissions(app.clone()));
 
+            // Initialize built-in presets including U-Shape Corporate template
+            tokio::spawn({
+                let app = app.clone();
+                async move {
+                    if let Err(e) = presets::create_builtin_presets(&app) {
+                        eprintln!("Failed to create built-in presets: {}", e);
+                    } else {
+                        println!("Built-in presets (including U-Shape Corporate) initialized successfully");
+                    }
+                }
+            });
+
             println!("Checking startup completion and permissions...");
             let permissions = permissions::do_permissions_check(false);
             println!("Permissions check result: {:?}", permissions);

@@ -61,6 +61,76 @@ impl PresetsStore {
     }
 }
 
+pub fn create_builtin_presets(app: &AppHandle<Wry>) -> Result<(), String> {
+    let existing = PresetsStore::get(app)?;
+
+    // Only create builtin presets if none exist
+    if existing.is_some() {
+        return Ok(());
+    }
+
+    let u_shape_corporate = Preset {
+        name: "U-Shape Corporate".to_string(),
+        config: ProjectConfiguration {
+            aspect_ratio: None,
+            background: cap_project::BackgroundConfiguration {
+                source: cap_project::BackgroundSource::Gradient {
+                    from: [0x0B, 0x55, 0x7A], // #0B557A - Upper left brand color
+                    to: [0xA3, 0xDD, 0xFB],   // #A3DDFB - Lower right brand color  
+                    angle: 135, // Diagonal gradient from upper-left to lower-right
+                },
+                blur: 0.0,
+                padding: 25.0,
+                rounding: 20.0,
+                inset: 0,
+                crop: None,
+                shadow: 80.0,
+                advanced_shadow: Some(cap_project::ShadowConfiguration {
+                    size: 80.0,
+                    opacity: 25.0,
+                    blur: 60.0,
+                }),
+            },
+            camera: cap_project::Camera {
+                hide: false,
+                mirror: false,
+                position: cap_project::CameraPosition {
+                    x: cap_project::CameraXPosition::Left,
+                    y: cap_project::CameraYPosition::Bottom,
+                },
+                size: 22.0,
+                zoom_size: None,
+                rounding: 12.0,
+                shadow: 60.0,
+                advanced_shadow: Some(cap_project::ShadowConfiguration {
+                    size: 70.0,
+                    opacity: 20.0,
+                    blur: 50.0,
+                }),
+                shape: cap_project::CameraShape::Square,
+            },
+            audio: cap_project::AudioConfiguration {
+                mute: false,
+                improve: true, // Enable audio improvement for corporate use
+                mic_volume_db: 0.0,
+                mic_stereo_mode: cap_project::StereoMode::Stereo,
+                system_volume_db: 0.0,
+            },
+            cursor: cap_project::CursorConfiguration::default(),
+            hotkeys: cap_project::HotkeysConfiguration::default(),
+            timeline: None,
+            captions: None,
+        },
+    };
+
+    PresetsStore::update(app, |store| {
+        store.presets.push(u_shape_corporate);
+        store.default = None; // Don't set as default automatically
+    })?;
+
+    Ok(())
+}
+
 impl Preset {
     fn resolve(&self, timeline: TimelineConfiguration) -> ProjectConfiguration {
         let mut ret = self.config.clone();

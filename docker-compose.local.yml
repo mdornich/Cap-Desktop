@@ -1,0 +1,81 @@
+name: cap-local-private
+
+# LOCAL PRIVATE CAP INSTALLATION
+# No external dependencies or authentication required
+# Includes U-Shape Corporate template
+# Safe to share with friends
+
+services:
+  cap-web:
+    container_name: cap-local-web
+    image: ghcr.io/capsoftware/cap-web:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: 'mysql://root:@cap-local-mysql:3306/planetscale?ssl={"rejectUnauthorized":false}'
+      WEB_URL: http://localhost:3005
+      NEXTAUTH_URL: http://localhost:3005
+      # Static keys for local use - safe since it's private/local only
+      DATABASE_ENCRYPTION_KEY: c7a1e98e1e5e4cec5a3fbf5eaf502d262fb99807ae2be8ee70537409e29cb6f9
+      NEXTAUTH_SECRET: c7a1e98e1e5e4cec5a3fbf5eaf502d262fb99807ae2be8ee70537409e29cb6f9
+      # Local MinIO storage configuration
+      CAP_AWS_ACCESS_KEY: capS3root
+      CAP_AWS_SECRET_KEY: capS3root
+      CAP_AWS_BUCKET: capso
+      CAP_AWS_REGION: us-east-1
+      S3_PUBLIC_ENDPOINT: http://localhost:3906
+      S3_INTERNAL_ENDPOINT: http://cap-local-minio:3902
+      # Disable external services for local use
+      RESEND_API_KEY: ""
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
+    ports:
+      - 3005:3000
+    depends_on:
+      cap-local-mysql:
+        condition: service_healthy
+      cap-local-minio:
+        condition: service_started
+
+  cap-local-mysql:
+    container_name: cap-local-mysql
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: planetscale
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    command:
+      [
+        "--max_connections=1000",
+        "--default-authentication-plugin=mysql_native_password",
+      ]
+    ports:
+      - "3307:3306"
+    volumes:
+      - cap-local-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Local S3 Storage
+  cap-local-minio:
+    container_name: cap-local-minio
+    image: "bitnami/minio:latest"
+    restart: unless-stopped
+    ports:
+      - "3906:3902"
+      - "3907:3903"
+    environment:
+      - MINIO_API_PORT_NUMBER=3902
+      - MINIO_CONSOLE_PORT_NUMBER=3903
+      - MINIO_ROOT_USER=capS3root
+      - MINIO_ROOT_PASSWORD=capS3root
+    volumes:
+      - cap-local-minio-data:/bitnami/minio/data
+      - cap-local-minio-certs:/certs
+
+volumes:
+  cap-local-mysql:
+  cap-local-minio-data:
+  cap-local-minio-certs:
